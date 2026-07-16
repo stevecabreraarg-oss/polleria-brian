@@ -1,4 +1,5 @@
-const PRODUCTS = [
+// Base de productos iniciales por defecto (si no existen en el storage)
+const DEFAULT_PRODUCTS = [
   { id: "pollo-entero", category: "Polleria", name: "Pollo entero", basePrice: 6000, tiers: [] },
   { id: "pata-muslo", category: "Polleria", name: "Pata Muslo", basePrice: 6000, tiers: [{ min: 5, price: 4500 }, { min: 3, price: 5000 }] },
   { id: "alitas", category: "Polleria", name: "Alitas", basePrice: 3500, tiers: [{ min: 5, price: 2000 }, { min: 3, price: 2500 }] },
@@ -8,20 +9,24 @@ const PRODUCTS = [
   { id: "menudo", category: "Polleria", name: "Menudo", basePrice: 1000, tiers: [] },
   { id: "hamburguesa-pollo", category: "Congelados", name: "Hamburguesa de pollo", basePrice: 12000, tiers: [] },
   { id: "hamburguesa-carne", category: "Congelados", name: "Hamburguesa de carne", basePrice: 12000, tiers: [] },
-  { id: "albondiga-carne", category: "Congelados", name: "Alb\u00f3ndiga de carne", basePrice: 12000, tiers: [] },
-  { id: "albondiga-pollo", category: "Congelados", name: "Alb\u00f3ndiga de pollo", basePrice: 12000, tiers: [] },
+  { id: "albondiga-carne", category: "Congelados", name: "Albóndiga de carne", basePrice: 12000, tiers: [] },
+  { id: "albondiga-pollo", category: "Congelados", name: "Albóndiga de pollo", basePrice: 12000, tiers: [] },
   { id: "nuggets", category: "Congelados", name: "Nuggets", basePrice: 12000, tiers: [] },
   { id: "mini-arrollado", category: "Congelados", name: "Mini arrollado", basePrice: 17000, tiers: [] },
-  { id: "arrollado-comun", category: "Congelados", name: "Arrollado com\u00fan", basePrice: 17000, tiers: [] },
+  { id: "arrollado-comun", category: "Congelados", name: "Arrollado común", basePrice: 17000, tiers: [] },
   { id: "patitas-pollo", category: "Congelados", name: "Patitas de pollo", basePrice: 8500, tiers: [] },
-  { id: "medallon-pollo", category: "Congelados", name: "Medall\u00f3n de pollo", basePrice: 8500, tiers: [] },
-  { id: "medallon-merluza", category: "Congelados", name: "Medall\u00f3n de merluza", basePrice: 8500, tiers: [] }
+  { id: "medallon-pollo", category: "Congelados", name: "Medallón de pollo", basePrice: 8500, tiers: [] },
+  { id: "medallon-merluza", category: "Congelados", name: "Medallón de merluza", basePrice: 8500, tiers: [] }
 ];
 
 const STORAGE_KEY = "polleria-brian-state-v1";
+const PRODUCTS_KEY = "polleria-brian-products-v1";
+
 const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS", maximumFractionDigits: 0 });
 const number = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
+// Cargamos los productos dinámicos desde LocalStorage o usamos los de por defecto
+let PRODUCTS = loadProducts();
 const state = loadState();
 const ticket = [];
 const el = {};
@@ -29,6 +34,7 @@ const el = {};
 document.addEventListener("DOMContentLoaded", () => {
   bindElements();
   createTicketUi();
+  createAdminUi(); // Agregamos la interfaz para crear/editar productos
   setToday();
   fillProductSelects();
   bindEvents();
@@ -36,6 +42,19 @@ document.addEventListener("DOMContentLoaded", () => {
   render();
   registerServiceWorker();
 });
+
+function loadProducts() {
+  try {
+    const saved = localStorage.getItem(PRODUCTS_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_PRODUCTS;
+  } catch {
+    return DEFAULT_PRODUCTS;
+  }
+}
+
+function saveProducts() {
+  localStorage.setItem(PRODUCTS_KEY, JSON.stringify(PRODUCTS));
+}
 
 function bindElements() {
   Object.assign(el, {
@@ -101,6 +120,53 @@ function createTicketUi() {
   });
 }
 
+function createAdminUi() {
+  // Creamos el panel de administración de productos dentro de la pestaña "Stock" o como panel separado
+  const stockPanel = el.stockForm.parentElement;
+  
+  const adminPanel = document.createElement("div");
+  adminPanel.className = "panel";
+  adminPanel.style.marginTop = "20px";
+  adminPanel.innerHTML = `
+    <div class="section-title">
+      <h2>Administrar Productos de la Pollería</h2>
+    </div>
+    <form id="newProductForm" class="form-grid" style="gap: 10px;">
+      <div>
+        <label>Nombre del Producto</label>
+        <input type="text" id="newProdName" placeholder="Ej: Milanesas de Pollo" required />
+      </div>
+      <div>
+        <label>Categoría</label>
+        <select id="newProdCategory">
+          <option value="Polleria">Polleria</option>
+          <option value="Congelados">Congelados</option>
+          <option value="Otros">Otros</option>
+        </select>
+      </div>
+      <div>
+        <label>Precio Base ($)</label>
+        <input type="number" id="newProdPrice" placeholder="Ej: 6000" min="0" required />
+      </div>
+      <div>
+        <label>Stock Inicial (kg)</label>
+        <input type="number" id="newProdStock" placeholder="Ej: 20" step="0.01" min="0" required />
+      </div>
+      <button class="primary-action" type="submit" style="grid-column: span 2; margin-top: 10px;">Crear Producto</button>
+    </form>
+  `;
+
+  stockPanel.insertAdjacentElement("afterend", adminPanel);
+  
+  // Agregar un contenedor flotante invisible en el HTML para el total del PDF
+  const totalContainer = document.createElement("div");
+  totalContainer.id = "pdfTotalContainer";
+  totalContainer.style.display = "none";
+  document.body.appendChild(totalContainer);
+
+  el.newProductForm = document.querySelector("#newProductForm");
+}
+
 function loadState() {
   const blank = { sales: [], stock: Object.fromEntries(PRODUCTS.map((product) => [product.id, 0])) };
   try {
@@ -142,8 +208,14 @@ function bindEvents() {
   el.periodFilter.addEventListener("change", renderSales);
   el.salesList.addEventListener("click", handleSalesListClick);
   el.exportCsv.addEventListener("click", exportCsv);
-  el.exportPdf.addEventListener("click", () => window.print());
+  el.exportPdf.addEventListener("click", prepareAndPrintPdf);
   el.resetDemoButton.addEventListener("click", clearData);
+
+  // Evento para el formulario de nuevo producto
+  el.newProductForm.addEventListener("submit", createNewProduct);
+
+  // Eventos delegados para editar precios en catálogo y eliminar productos
+  el.catalogList.addEventListener("click", handleCatalogClick);
 }
 
 function switchView(viewId) {
@@ -156,14 +228,16 @@ function getProduct(productId) {
 }
 
 function priceFor(product, qty) {
-  const tier = product.tiers.find((item) => qty >= item.min);
+  if (!product) return 0;
+  const tier = product.tiers && product.tiers.find((item) => qty >= item.min);
   return tier ? tier.price : product.basePrice;
 }
 
 function tierText(product, qty) {
-  const active = product.tiers.find((item) => qty >= item.min);
+  if (!product) return "";
+  const active = product.tiers && product.tiers.find((item) => qty >= item.min);
   if (active) return `Promo aplicada: desde ${active.min} kg`;
-  if (!product.tiers.length) return "Precio fijo por kg";
+  if (!product.tiers || !product.tiers.length) return "Precio fijo por kg";
   return product.tiers.map((item) => `${item.min}+ kg: ${money.format(item.price)}`).join(" | ");
 }
 
@@ -209,11 +283,33 @@ function addItemToTicket(event) {
 }
 
 function handleTicketListClick(event) {
-  const button = event.target.closest("[data-remove-ticket-item]");
-  if (!button) return;
-  const index = ticket.findIndex((item) => item.id === button.dataset.removeTicketItem);
-  if (index !== -1) ticket.splice(index, 1);
-  renderTicket();
+  // Quitar artículo
+  const removeButton = event.target.closest("[data-remove-ticket-item]");
+  if (removeButton) {
+    const index = ticket.findIndex((item) => item.id === removeButton.dataset.removeTicketItem);
+    if (index !== -1) ticket.splice(index, 1);
+    renderTicket();
+    return;
+  }
+
+  // Editar precio final directamente (Mejora 1)
+  const editButton = event.target.closest("[data-edit-ticket-total]");
+  if (editButton) {
+    const itemId = editButton.dataset.editTicketTotal;
+    const item = ticket.find((i) => i.id === itemId);
+    if (!item) return;
+    
+    const nuevoTotal = prompt(`Modificar importe final cobrado para ${item.productName} (Actual: ${money.format(item.total)}):`, item.total);
+    if (nuevoTotal !== null) {
+      const valorNumerico = Math.round(parseFloat(nuevoTotal));
+      if (!isNaN(valorNumerico) && valorNumerico >= 0) {
+        item.total = valorNumerico;
+        // Ajustamos el precio unitario correspondiente de manera ficticia para mantener consistencia
+        item.unitPrice = Math.round(valorNumerico / item.qty);
+        renderTicket();
+      }
+    }
+  }
 }
 
 function finalizeSale() {
@@ -284,6 +380,85 @@ function addStock(event) {
   renderSummary();
 }
 
+function createNewProduct(event) {
+  event.preventDefault();
+  const name = document.querySelector("#newProdName").value.trim();
+  const category = document.querySelector("#newProdCategory").value;
+  const price = Math.round(parseFloat(document.querySelector("#newProdPrice").value));
+  const initialStock = roundKg(parseFloat(document.querySelector("#newProdStock").value) || 0);
+
+  if (!name || isNaN(price) || price < 0) return;
+
+  const id = name.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
+  if (getProduct(id)) {
+    alert("Ya existe un producto con un nombre muy similar.");
+    return;
+  }
+
+  const newProduct = {
+    id,
+    category,
+    name,
+    basePrice: price,
+    tiers: []
+  };
+
+  PRODUCTS.push(newProduct);
+  state.stock[id] = initialStock;
+
+  saveProducts();
+  saveState();
+  
+  el.newProductForm.reset();
+  fillProductSelects();
+  render();
+  alert("¡Producto agregado con éxito!");
+}
+
+function handleCatalogClick(event) {
+  // Editar precio desde el catálogo (Mejora 3)
+  const editPriceBtn = event.target.closest("[data-edit-price]");
+  if (editPriceBtn) {
+    const prodId = editPriceBtn.dataset.editPrice;
+    const product = getProduct(prodId);
+    if (!product) return;
+
+    const nuevoPrecio = prompt(`Ingresa el nuevo precio para ${product.name}:`, product.basePrice);
+    if (nuevoPrecio !== null) {
+      const valorNumerico = Math.round(parseFloat(nuevoPrecio));
+      if (!isNaN(valorNumerico) && valorNumerico >= 0) {
+        product.basePrice = valorNumerico;
+        saveProducts();
+        render();
+      }
+    }
+    return;
+  }
+
+  // Eliminar producto por completo (Mejora 2)
+  const deleteProdBtn = event.target.closest("[data-delete-product]");
+  if (deleteProdBtn) {
+    const prodId = deleteProdBtn.dataset.deleteProduct;
+    const product = getProduct(prodId);
+    if (!product) return;
+
+    const confirmed = confirm(`¿Estás seguro de que deseas eliminar permanentemente "${product.name}" de la base de datos?\n\n¡Esta acción no se puede deshacer!`);
+    if (!confirmed) return;
+
+    // Remover de la lista global
+    PRODUCTS = PRODUCTS.filter((p) => p.id !== prodId);
+    delete state.stock[prodId];
+
+    saveProducts();
+    saveState();
+    fillProductSelects();
+    render();
+  }
+}
+
 function clearData() {
   const confirmed = confirm("Borrar ventas y stock cargado?");
   if (!confirmed) return;
@@ -327,7 +502,7 @@ function renderTicket() {
         <small>${number.format(item.qty)} kg x ${money.format(item.unitPrice)}</small>
       </div>
       <div class="sale-actions">
-        <div class="money">${money.format(item.total)}</div>
+        <div class="money" style="cursor: pointer; text-decoration: underline dotted;" data-edit-ticket-total="${item.id}" title="Haga clic para modificar el cobro de la balanza">${money.format(item.total)} ✏️</div>
         <button class="delete-sale" type="button" data-remove-ticket-item="${item.id}" title="Quitar articulo">Quitar</button>
       </div>
     </article>
@@ -336,16 +511,19 @@ function renderTicket() {
 
 function renderCatalog() {
   el.catalogList.innerHTML = PRODUCTS.map((product) => {
-    const promos = product.tiers.length
+    const promos = product.tiers && product.tiers.length
       ? product.tiers.map((tier) => `${tier.min}+ kg ${money.format(tier.price)}`).join(" / ")
       : "sin promo";
     return `
-      <article class="product-item">
-        <div>
+      <article class="product-item" style="align-items: center;">
+        <div style="flex: 1;">
           <strong>${product.name}</strong>
           <small>${product.category} - ${promos}</small>
         </div>
-        <div class="money">${money.format(product.basePrice)}</div>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="money" style="cursor: pointer; text-decoration: underline dotted;" data-edit-price="${product.id}" title="Cambiar precio">${money.format(product.basePrice)} ✏️</div>
+          <button class="delete-sale" style="background-color: #dc3545; color: white;" type="button" data-delete-product="${product.id}" title="Eliminar producto por completo">Eliminar</button>
+        </div>
       </article>
     `;
   }).join("");
@@ -408,6 +586,30 @@ function filteredSales(period) {
     if (period === "month") return saleDate.getFullYear() === now.getFullYear() && saleDate.getMonth() === now.getMonth();
     return true;
   });
+}
+
+function prepareAndPrintPdf() {
+  // Calculamos el total de las ventas filtradas en pantalla
+  const activePeriod = el.periodFilter.value;
+  const totalSum = sumSales(activePeriod);
+  
+  // Agregamos de manera temporal un encabezado de suma global visible SOLO al imprimir
+  const pdfTotalContainer = document.querySelector("#pdfTotalContainer");
+  pdfTotalContainer.innerHTML = `
+    <div class="pdf-total-header" style="text-align: center; margin-bottom: 20px; padding: 15px; border: 2px solid #2e7d32; border-radius: 8px; background-color: #f1f8e9;">
+      <h2 style="margin: 0; color: #2e7d32;">CIERRE DE CAJA - Pollería Brian</h2>
+      <p style="margin: 5px 0 0; font-size: 1.1rem;">Periodo consultado: <strong>${activePeriod.toUpperCase()}</strong></p>
+      <div style="font-size: 1.8rem; font-weight: bold; margin-top: 10px; color: #1b5e20;">TOTAL RECAUDADO: ${money.format(totalSum)}</div>
+    </div>
+  `;
+  
+  pdfTotalContainer.style.display = "block";
+  
+  // Disparamos la impresión nativa
+  window.print();
+  
+  // Ocultamos de nuevo para la navegación diaria normal en el celular
+  pdfTotalContainer.style.display = "none";
 }
 
 function exportCsv() {
