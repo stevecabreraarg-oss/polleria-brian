@@ -15,3 +15,4 @@ PWA para registrar ventas, totales y stock de una polleria.
 ## Publicacion
 
 Este proyecto esta listo para GitHub Pages.
+ 
