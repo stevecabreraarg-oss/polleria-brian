@@ -8,14 +8,14 @@ const PRODUCTS = [
   { id: "menudo", category: "Polleria", name: "Menudo", basePrice: 1000, tiers: [] },
   { id: "hamburguesa-pollo", category: "Congelados", name: "Hamburguesa de pollo", basePrice: 12000, tiers: [] },
   { id: "hamburguesa-carne", category: "Congelados", name: "Hamburguesa de carne", basePrice: 12000, tiers: [] },
-  { id: "albondiga-carne", category: "Congelados", name: "Albóndiga de carne", basePrice: 12000, tiers: [] },
-  { id: "albondiga-pollo", category: "Congelados", name: "Albóndiga de pollo", basePrice: 12000, tiers: [] },
+  { id: "albondiga-carne", category: "Congelados", name: "Alb\u00f3ndiga de carne", basePrice: 12000, tiers: [] },
+  { id: "albondiga-pollo", category: "Congelados", name: "Alb\u00f3ndiga de pollo", basePrice: 12000, tiers: [] },
   { id: "nuggets", category: "Congelados", name: "Nuggets", basePrice: 12000, tiers: [] },
   { id: "mini-arrollado", category: "Congelados", name: "Mini arrollado", basePrice: 17000, tiers: [] },
-  { id: "arrollado-comun", category: "Congelados", name: "Arrollado común", basePrice: 17000, tiers: [] },
+  { id: "arrollado-comun", category: "Congelados", name: "Arrollado com\u00fan", basePrice: 17000, tiers: [] },
   { id: "patitas-pollo", category: "Congelados", name: "Patitas de pollo", basePrice: 8500, tiers: [] },
-  { id: "medallon-pollo", category: "Congelados", name: "Medallón de pollo", basePrice: 8500, tiers: [] },
-  { id: "medallon-merluza", category: "Congelados", name: "Medallón de merluza", basePrice: 8500, tiers: [] }
+  { id: "medallon-pollo", category: "Congelados", name: "Medall\u00f3n de pollo", basePrice: 8500, tiers: [] },
+  { id: "medallon-merluza", category: "Congelados", name: "Medall\u00f3n de merluza", basePrice: 8500, tiers: [] }
 ];
 
 const STORAGE_KEY = "polleria-brian-state-v1";
@@ -143,9 +143,8 @@ function bindEvents() {
   el.salesList.addEventListener("click", handleSalesListClick);
   el.exportCsv.addEventListener("click", exportCsv);
 
-  // NUEVO: Modificación para inyectar los totales en la cabecera antes de exportar a PDF
+  // PDF con totales de cierre
   el.exportPdf.addEventListener("click", () => {
-    // Creamos una caja de resumen exclusiva para la versión impresa/PDF
     const printHeader = document.createElement("div");
     printHeader.id = "pdfPrintHeader";
     printHeader.style.cssText = `
@@ -158,7 +157,6 @@ function bindEvents() {
       font-family: sans-serif;
     `;
 
-    // Asignamos estilos específicos de impresión por CSS dinámico para que solo se vea al imprimir
     const styleTag = document.createElement("style");
     styleTag.id = "pdfPrintStyles";
     styleTag.innerHTML = `
@@ -197,13 +195,9 @@ function bindEvents() {
       </div>
     `;
 
-    // Lo agregamos arriba de la lista de ventas para que salga en primer lugar en el PDF
     el.salesList.insertAdjacentElement("beforebegin", printHeader);
-
-    // Ejecutamos la impresión
     window.print();
 
-    // Limpiamos los elementos temporales una vez que se cierra el diálogo de impresión
     setTimeout(() => {
       printHeader.remove();
       styleTag.remove();
@@ -275,12 +269,39 @@ function addItemToTicket(event) {
   renderTicket();
 }
 
+// NUEVO: Maneja tanto la eliminación como la EDICIÓN del total de un ítem en el ticket
 function handleTicketListClick(event) {
-  const button = event.target.closest("[data-remove-ticket-item]");
-  if (!button) return;
-  const index = ticket.findIndex((item) => item.id === button.dataset.removeTicketItem);
-  if (index !== -1) ticket.splice(index, 1);
-  renderTicket();
+  // Acción de eliminar
+  const removeButton = event.target.closest("[data-remove-ticket-item]");
+  if (removeButton) {
+    const index = ticket.findIndex((item) => item.id === removeButton.dataset.removeTicketItem);
+    if (index !== -1) ticket.splice(index, 1);
+    renderTicket();
+    return;
+  }
+
+  // NUEVO: Acción de editar precio total
+  const editButton = event.target.closest("[data-edit-ticket-item]");
+  if (editButton) {
+    const itemId = editButton.dataset.editTicketItem;
+    const item = ticket.find((i) => i.id === itemId);
+    if (!item) return;
+
+    const inputVal = prompt(`Editar precio total para ${item.productName}:`, item.total);
+    if (inputVal === null) return; // Si cancela, no hacemos nada
+
+    const newTotal = Math.round(parseFloat(inputVal));
+    if (isNaN(newTotal) || newTotal < 0) {
+      alert("Por favor, ingresá un monto válido.");
+      return;
+    }
+
+    // Modificamos el total del ítem y recalculamos su precio por kg de forma automática
+    item.total = newTotal;
+    item.unitPrice = item.qty > 0 ? Math.round(newTotal / item.qty) : 0;
+    
+    renderTicket();
+  }
 }
 
 function finalizeSale() {
@@ -375,6 +396,7 @@ function renderSummary() {
   el.monthTotal.textContent = money.format(sumSales("month"));
 }
 
+// NUEVO: Agregado el botón "Editar" en el renderizado de cada ítem del ticket
 function renderTicket() {
   el.ticketItemCount.textContent = `${ticket.length} ${ticket.length === 1 ? "item" : "items"}`;
   el.ticketTotal.textContent = money.format(sumItems(ticket));
@@ -393,8 +415,9 @@ function renderTicket() {
         <strong>${item.productName}</strong>
         <small>${number.format(item.qty)} kg x ${money.format(item.unitPrice)}</small>
       </div>
-      <div class="sale-actions">
+      <div class="sale-actions" style="display: flex; align-items: center; gap: 8px;">
         <div class="money">${money.format(item.total)}</div>
+        <button class="edit-sale" type="button" data-edit-ticket-item="${item.id}" title="Editar precio total" style="background: #e0f2f1; color: #00796b; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;">Editar</button>
         <button class="delete-sale" type="button" data-remove-ticket-item="${item.id}" title="Quitar articulo">Quitar</button>
       </div>
     </article>
