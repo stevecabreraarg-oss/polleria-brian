@@ -1,0 +1,19 @@
+{
+  "name": "Polleria Brian",
+  "short_name": "Polleria",
+  "description": "Registro de ventas y stock para polleria.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fffdf7",
+  "theme_color": "#13251d",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
