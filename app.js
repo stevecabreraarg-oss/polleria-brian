@@ -196,7 +196,18 @@ function bindEvents() {
     `;
 
     el.salesList.insertAdjacentElement("beforebegin", printHeader);
+    // 6. Usamos el evento de limpieza nativo 'afterprint'
+    // Este evento se dispara ÚNICAMENTE cuando el navegador terminó de generar el PDF físico
+    const cleanup = () => {
+      printHeader.remove();
+      styleTag.remove();
+      window.removeEventListener("afterprint", cleanup);
+    };
+    window.addEventListener("afterprint", cleanup);
+
+    // 7. Lanzamos la impresión de manera segura
     window.print();
+    });
 
     setTimeout(() => {
       printHeader.remove();
