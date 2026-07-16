@@ -23,10 +23,12 @@ const money = new Intl.NumberFormat("es-AR", { style: "currency", currency: "ARS
 const number = new Intl.NumberFormat("es-AR", { maximumFractionDigits: 2 });
 
 const state = loadState();
+const ticket = [];
 const el = {};
 
 document.addEventListener("DOMContentLoaded", () => {
   bindElements();
+  createTicketUi();
   setToday();
   fillProductSelects();
   bindEvents();
@@ -59,6 +61,43 @@ function bindElements() {
     exportCsv: document.querySelector("#exportCsv"),
     exportPdf: document.querySelector("#exportPdf"),
     resetDemoButton: document.querySelector("#resetDemoButton")
+  });
+}
+
+function createTicketUi() {
+  const submitButton = el.saleForm.querySelector("button[type='submit']");
+  submitButton.textContent = "Agregar al ticket";
+
+  const panel = document.createElement("section");
+  panel.className = "panel";
+  panel.id = "currentTicketPanel";
+  panel.innerHTML = `
+    <div class="section-title">
+      <h2>Ticket actual</h2>
+      <span class="stock-total" id="ticketItemCount">0 items</span>
+    </div>
+    <div class="sales-list" id="ticketList"></div>
+    <div class="ticket" style="margin-top: 12px;">
+      <div>
+        <span>Total venta</span>
+        <strong id="ticketTotal">$0</strong>
+      </div>
+      <small id="ticketHelp">Agrega articulos y finaliza la venta</small>
+    </div>
+    <div class="export-row" style="margin: 12px 0 0;">
+      <button class="secondary-action" id="clearTicketButton" type="button">Vaciar</button>
+      <button class="primary-action" id="finishSaleButton" type="button">Finalizar venta</button>
+    </div>
+  `;
+
+  el.saleForm.insertAdjacentElement("afterend", panel);
+  Object.assign(el, {
+    ticketItemCount: panel.querySelector("#ticketItemCount"),
+    ticketList: panel.querySelector("#ticketList"),
+    ticketTotal: panel.querySelector("#ticketTotal"),
+    ticketHelp: panel.querySelector("#ticketHelp"),
+    clearTicketButton: panel.querySelector("#clearTicketButton"),
+    finishSaleButton: panel.querySelector("#finishSaleButton")
   });
 }
 
@@ -95,31 +134,16 @@ function bindEvents() {
   el.productSelect.addEventListener("change", updateSalePreview);
   el.quantityInput.addEventListener("input", updateSalePreview);
   el.unitPriceInput.addEventListener("input", updateSalePreviewFromManualPrice);
-  el.saleForm.addEventListener("submit", registerSale);
+  el.saleForm.addEventListener("submit", addItemToTicket);
+  el.ticketList.addEventListener("click", handleTicketListClick);
+  el.finishSaleButton.addEventListener("click", finalizeSale);
+  el.clearTicketButton.addEventListener("click", clearTicket);
   el.stockForm.addEventListener("submit", addStock);
   el.periodFilter.addEventListener("change", renderSales);
   el.salesList.addEventListener("click", handleSalesListClick);
   el.exportCsv.addEventListener("click", exportCsv);
   el.exportPdf.addEventListener("click", () => window.print());
   el.resetDemoButton.addEventListener("click", clearData);
-}
-
-function handleSalesListClick(event) {
-  const button = event.target.closest("[data-delete-sale]");
-  if (!button) return;
-  deleteSale(button.dataset.deleteSale);
-}
-
-function deleteSale(saleId) {
-  const index = state.sales.findIndex((sale) => sale.id === saleId);
-  if (index === -1) return;
-  const sale = state.sales[index];
-  const confirmed = confirm(`Anular venta de ${sale.productName}?`);
-  if (!confirmed) return;
-  state.sales.splice(index, 1);
-  state.stock[sale.productId] = roundKg((state.stock[sale.productId] || 0) + sale.qty);
-  saveState();
-  render();
 }
 
 function switchView(viewId) {
@@ -152,9 +176,8 @@ function updateSalePreview() {
 }
 
 function updateSalePreviewFromManualPrice() {
-  const product = getProduct(el.productSelect.value);
   const qty = parseFloat(el.quantityInput.value) || 0;
-  const unitPrice = parseFloat(el.unitPriceInput.value) || priceFor(product, qty);
+  const unitPrice = parseFloat(el.unitPriceInput.value) || 0;
   paintSalePreview(qty, unitPrice, "Precio editado");
 }
 
@@ -163,28 +186,89 @@ function paintSalePreview(qty, unitPrice, helperText) {
   el.priceRule.textContent = helperText;
 }
 
-function registerSale(event) {
+function addItemToTicket(event) {
   event.preventDefault();
   const product = getProduct(el.productSelect.value);
   const qty = roundKg(parseFloat(el.quantityInput.value));
   const unitPrice = Math.round(parseFloat(el.unitPriceInput.value));
   if (!product || qty <= 0 || unitPrice < 0) return;
 
-  state.sales.unshift({
-    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
-    date: el.saleDate.value,
+  ticket.push({
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + Math.random()),
     productId: product.id,
     productName: product.name,
     category: product.category,
     qty,
     unitPrice,
-    total: Math.round(qty * unitPrice),
-    createdAt: new Date().toISOString()
+    total: Math.round(qty * unitPrice)
   });
-  state.stock[product.id] = roundKg((state.stock[product.id] || 0) - qty);
-  saveState();
+
   el.quantityInput.value = "";
   updateSalePreview();
+  renderTicket();
+}
+
+function handleTicketListClick(event) {
+  const button = event.target.closest("[data-remove-ticket-item]");
+  if (!button) return;
+  const index = ticket.findIndex((item) => item.id === button.dataset.removeTicketItem);
+  if (index !== -1) ticket.splice(index, 1);
+  renderTicket();
+}
+
+function finalizeSale() {
+  if (!ticket.length) {
+    alert("Agrega al menos un articulo al ticket.");
+    return;
+  }
+
+  const items = ticket.map((item) => ({ ...item }));
+  const sale = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    date: el.saleDate.value,
+    items,
+    total: sumItems(items),
+    createdAt: new Date().toISOString()
+  };
+
+  state.sales.unshift(sale);
+  items.forEach((item) => {
+    state.stock[item.productId] = roundKg((state.stock[item.productId] || 0) - item.qty);
+  });
+
+  saveState();
+  ticket.splice(0, ticket.length);
+  render();
+}
+
+function clearTicket() {
+  if (!ticket.length) return;
+  const confirmed = confirm("Vaciar el ticket actual?");
+  if (!confirmed) return;
+  ticket.splice(0, ticket.length);
+  renderTicket();
+}
+
+function handleSalesListClick(event) {
+  const button = event.target.closest("[data-delete-sale]");
+  if (!button) return;
+  deleteSale(button.dataset.deleteSale);
+}
+
+function deleteSale(saleId) {
+  const index = state.sales.findIndex((sale) => sale.id === saleId);
+  if (index === -1) return;
+  const sale = state.sales[index];
+  const items = saleItems(sale);
+  const confirmed = confirm(`Anular venta de ${formatDate(sale.date)} por ${money.format(saleTotal(sale))}?`);
+  if (!confirmed) return;
+
+  state.sales.splice(index, 1);
+  items.forEach((item) => {
+    state.stock[item.productId] = roundKg((state.stock[item.productId] || 0) + item.qty);
+  });
+
+  saveState();
   render();
 }
 
@@ -205,12 +289,14 @@ function clearData() {
   if (!confirmed) return;
   state.sales = [];
   state.stock = Object.fromEntries(PRODUCTS.map((product) => [product.id, 0]));
+  ticket.splice(0, ticket.length);
   saveState();
   render();
 }
 
 function render() {
   renderSummary();
+  renderTicket();
   renderCatalog();
   renderSales();
   renderStock();
@@ -220,6 +306,32 @@ function renderSummary() {
   el.todayTotal.textContent = money.format(sumSales("day"));
   el.weekTotal.textContent = money.format(sumSales("week"));
   el.monthTotal.textContent = money.format(sumSales("month"));
+}
+
+function renderTicket() {
+  el.ticketItemCount.textContent = `${ticket.length} ${ticket.length === 1 ? "item" : "items"}`;
+  el.ticketTotal.textContent = money.format(sumItems(ticket));
+  el.finishSaleButton.disabled = ticket.length === 0;
+  el.clearTicketButton.disabled = ticket.length === 0;
+  el.ticketHelp.textContent = ticket.length ? "Listo para finalizar" : "Agrega articulos y finaliza la venta";
+
+  if (!ticket.length) {
+    el.ticketList.innerHTML = document.querySelector("#emptyTemplate").innerHTML;
+    return;
+  }
+
+  el.ticketList.innerHTML = ticket.map((item) => `
+    <article class="sale-item">
+      <div>
+        <strong>${item.productName}</strong>
+        <small>${number.format(item.qty)} kg x ${money.format(item.unitPrice)}</small>
+      </div>
+      <div class="sale-actions">
+        <div class="money">${money.format(item.total)}</div>
+        <button class="delete-sale" type="button" data-remove-ticket-item="${item.id}" title="Quitar articulo">Quitar</button>
+      </div>
+    </article>
+  `).join("");
 }
 
 function renderCatalog() {
@@ -245,18 +357,24 @@ function renderSales() {
     el.salesList.innerHTML = document.querySelector("#emptyTemplate").innerHTML;
     return;
   }
-  el.salesList.innerHTML = sales.map((sale) => `
-    <article class="sale-item">
-      <div>
-        <strong>${sale.productName}</strong>
-        <small>${formatDate(sale.date)} - ${number.format(sale.qty)} kg x ${money.format(sale.unitPrice)}</small>
-      </div>
-      <div class="sale-actions">
-        <div class="money">${money.format(sale.total)}</div>
-        <button class="delete-sale" type="button" data-delete-sale="${sale.id}" title="Anular venta">Anular</button>
-      </div>
-    </article>
-  `).join("");
+
+  el.salesList.innerHTML = sales.map((sale) => {
+    const items = saleItems(sale);
+    const title = items.length === 1 ? items[0].productName : `Venta con ${items.length} articulos`;
+    const detail = items.map((item) => `${item.productName}: ${number.format(item.qty)} kg`).join(" | ");
+    return `
+      <article class="sale-item">
+        <div>
+          <strong>${title}</strong>
+          <small>${formatDate(sale.date)} - ${detail}</small>
+        </div>
+        <div class="sale-actions">
+          <div class="money">${money.format(saleTotal(sale))}</div>
+          <button class="delete-sale" type="button" data-delete-sale="${sale.id}" title="Anular venta">Anular</button>
+        </div>
+      </article>
+    `;
+  }).join("");
 }
 
 function renderStock() {
@@ -277,7 +395,7 @@ function renderStock() {
 }
 
 function sumSales(period) {
-  return filteredSales(period).reduce((sum, sale) => sum + sale.total, 0);
+  return filteredSales(period).reduce((sum, sale) => sum + saleTotal(sale), 0);
 }
 
 function filteredSales(period) {
@@ -293,11 +411,13 @@ function filteredSales(period) {
 }
 
 function exportCsv() {
-  const sales = filteredSales(el.periodFilter.value);
-  const rows = [
-    ["Fecha", "Categoria", "Producto", "Cantidad kg", "Precio kg", "Total"],
-    ...sales.map((sale) => [sale.date, sale.category, sale.productName, sale.qty, sale.unitPrice, sale.total])
-  ];
+  const rows = [["Fecha", "Venta", "Categoria", "Producto", "Cantidad kg", "Precio kg", "Total item", "Total venta"]];
+  filteredSales(el.periodFilter.value).forEach((sale) => {
+    saleItems(sale).forEach((item) => {
+      rows.push([sale.date, sale.id, item.category, item.productName, item.qty, item.unitPrice, item.total, saleTotal(sale)]);
+    });
+  });
+
   const csv = rows.map((row) => row.map(csvCell).join(";")).join("\n");
   const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
@@ -306,6 +426,26 @@ function exportCsv() {
   link.download = `ventas-polleria-${el.periodFilter.value}.csv`;
   link.click();
   URL.revokeObjectURL(url);
+}
+
+function saleItems(sale) {
+  if (Array.isArray(sale.items)) return sale.items;
+  return [{
+    productId: sale.productId,
+    productName: sale.productName,
+    category: sale.category,
+    qty: sale.qty,
+    unitPrice: sale.unitPrice,
+    total: sale.total
+  }];
+}
+
+function saleTotal(sale) {
+  return typeof sale.total === "number" ? sale.total : sumItems(saleItems(sale));
+}
+
+function sumItems(items) {
+  return items.reduce((sum, item) => sum + item.total, 0);
 }
 
 function csvCell(value) {
