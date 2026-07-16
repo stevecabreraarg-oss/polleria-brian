@@ -143,7 +143,7 @@ function bindEvents() {
   el.salesList.addEventListener("click", handleSalesListClick);
   el.exportCsv.addEventListener("click", exportCsv);
 
-  // PDF con totales de cierre
+  // PDF con totales de cierre de forma segura
   el.exportPdf.addEventListener("click", () => {
     const printHeader = document.createElement("div");
     printHeader.id = "pdfPrintHeader";
@@ -163,6 +163,9 @@ function bindEvents() {
       @media print {
         #pdfPrintHeader {
           display: block !important;
+        }
+        .delete-sale {
+          display: none !important;
         }
       }
     `;
@@ -196,8 +199,8 @@ function bindEvents() {
     `;
 
     el.salesList.insertAdjacentElement("beforebegin", printHeader);
-    // 6. Usamos el evento de limpieza nativo 'afterprint'
-    // Este evento se dispara ÚNICAMENTE cuando el navegador terminó de generar el PDF físico
+
+    // Evento de limpieza una vez se termine de generar el PDF
     const cleanup = () => {
       printHeader.remove();
       styleTag.remove();
@@ -205,14 +208,7 @@ function bindEvents() {
     };
     window.addEventListener("afterprint", cleanup);
 
-    // 7. Lanzamos la impresión de manera segura
     window.print();
-    });
-
-    setTimeout(() => {
-      printHeader.remove();
-      styleTag.remove();
-    }, 1000);
   });
 
   el.resetDemoButton.addEventListener("click", clearData);
@@ -280,7 +276,6 @@ function addItemToTicket(event) {
   renderTicket();
 }
 
-// NUEVO: Maneja tanto la eliminación como la EDICIÓN del total de un ítem en el ticket
 function handleTicketListClick(event) {
   // Acción de eliminar
   const removeButton = event.target.closest("[data-remove-ticket-item]");
@@ -291,7 +286,7 @@ function handleTicketListClick(event) {
     return;
   }
 
-  // NUEVO: Acción de editar precio total
+  // Acción de editar precio total
   const editButton = event.target.closest("[data-edit-ticket-item]");
   if (editButton) {
     const itemId = editButton.dataset.editTicketItem;
@@ -299,7 +294,7 @@ function handleTicketListClick(event) {
     if (!item) return;
 
     const inputVal = prompt(`Editar precio total para ${item.productName}:`, item.total);
-    if (inputVal === null) return; // Si cancela, no hacemos nada
+    if (inputVal === null) return;
 
     const newTotal = Math.round(parseFloat(inputVal));
     if (isNaN(newTotal) || newTotal < 0) {
@@ -307,7 +302,6 @@ function handleTicketListClick(event) {
       return;
     }
 
-    // Modificamos el total del ítem y recalculamos su precio por kg de forma automática
     item.total = newTotal;
     item.unitPrice = item.qty > 0 ? Math.round(newTotal / item.qty) : 0;
     
@@ -407,7 +401,6 @@ function renderSummary() {
   el.monthTotal.textContent = money.format(sumSales("month"));
 }
 
-// NUEVO: Agregado el botón "Editar" en el renderizado de cada ítem del ticket
 function renderTicket() {
   el.ticketItemCount.textContent = `${ticket.length} ${ticket.length === 1 ? "item" : "items"}`;
   el.ticketTotal.textContent = money.format(sumItems(ticket));
